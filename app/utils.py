@@ -39,11 +39,15 @@ def open_in_new_terminal(command, work_dir):
     system = platform.system()
     try:
         if system == "Linux":
+            # Comando volta a ser o original, sem o 'source'.
             full_command = f'cd "{work_dir}" && {command}; exec bash'
+            # A MUDANÇA ESTÁ AQUI: usamos 'bash -ic' em vez de 'bash -c'.
+            # O '-i' força o modo interativo, que carrega o .bashrc corretamente.
             subprocess.Popen(
-                ['gnome-terminal', '--', 'bash', '-c', full_command]
-              )
+                ['gnome-terminal', '--', 'bash', '-ic', full_command]
+            )
         elif system == "Windows":
+            # Código do Windows permanece o mesmo
             full_command = f'title={os.path.basename(work_dir)} && {command}'
             subprocess.Popen(
                 f'start cmd /k "{full_command}"',
