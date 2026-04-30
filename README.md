@@ -63,11 +63,21 @@ pyinstaller ServiceDeck_windows.spec
 
 ## Melhorias futuras
 
-- **Perfis/grupos de serviços** — salvar diferentes conjuntos de serviços para alternar entre projetos
-- **Auto-detect mais stacks** — detectar `Makefile`, `docker-compose.yml`, `Cargo.toml` e sugerir o comando adequado
-- **System tray** — minimizar para a bandeja do sistema em vez de fechar a janela
-- **Verificação de atualização** — notificar quando houver nova versão disponível no GitHub
-- **Porta detectada automaticamente** — exibir em qual porta cada serviço está respondendo
+**Médio prazo:**
+
+| Ideia | Por quê |
+|-------|---------|
+| **Perfis/grupos de serviços** | Dev tem projeto A com 4 serviços e projeto B com 6 — hoje precisa reconfigurar tudo ao trocar |
+| **Auto-detect mais stacks** | Detectar `Makefile`, `docker-compose.yml`, `Cargo.toml`, `pyproject.toml` e sugerir o comando adequado |
+| **System tray** | Minimizar para a bandeja em vez de fechar — app fica rodando sem ocupar taskbar |
+| **Botão copiar log** | Simples, mas útil pra debugar |
+
+**Futuro:**
+
+| Ideia | Por quê |
+|-------|---------|
+| **Verificação de atualização** | Checar no GitHub Releases se tem versão nova e avisar o usuário |
+| **Porta detectada automaticamente** | Quando o serviço sobe, mostrar em qual porta está respondendo |
 
 ---
 
