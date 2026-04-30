@@ -14,18 +14,12 @@ Gerenciador de microserviços com interface gráfica. Permite iniciar, monitorar
 ### Linux
 
 ```bash
-# Extrair
 tar -xzf ServiceDeck-linux.tar.gz
-
-# Entrar na pasta
 cd ServiceDeck
-
-# (Opcional) Criar atalho no sistema
-bash setup.sh
-
-# Executar diretamente
 ./ServiceDeck
 ```
+
+> **Opcional:** rode `bash setup.sh` para criar um atalho no menu de aplicativos do sistema.
 
 ### Windows
 
