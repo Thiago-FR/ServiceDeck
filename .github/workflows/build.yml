@@ -1,0 +1,63 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install system dependencies
+        run: sudo apt-get install -y libgl1 libglib2.0-0 libegl1
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Build Linux executable
+        run: pyinstaller ServiceDeck.spec
+
+      - name: Package as tar.gz
+        run: tar -czf ServiceDeck-linux.tar.gz -C dist ServiceDeck
+
+      - name: Upload to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ServiceDeck-linux.tar.gz
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Build Windows executable
+        run: pyinstaller ServiceDeck_windows.spec
+
+      - name: Package as zip
+        run: Compress-Archive -Path dist\ServiceDeck\* -DestinationPath ServiceDeck-windows.zip
+
+      - name: Upload to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ServiceDeck-windows.zip
