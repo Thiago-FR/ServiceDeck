@@ -2,6 +2,7 @@
 
 import os
 import json
+import platform
 import subprocess
 import psutil
 from PyQt6.QtWidgets import (
@@ -199,10 +200,11 @@ class ServiceDeckApp(QWidget):
             if command:
                 self.log(f"💻 Abrindo '{service}' com o comando '{command}'...")
                 try:
-                    subprocess.Popen(
-                        command.split(),
-                        cwd=os.path.join(self.base_path, service)
-                    )
+                    work_dir = os.path.join(self.base_path, service)
+                    if platform.system() == "Windows":
+                        subprocess.Popen(command, shell=True, cwd=work_dir)
+                    else:
+                        subprocess.Popen(command.split(), cwd=work_dir)
                 except Exception as e:
                     self.log(f"❌ Erro ao abrir '{service}': {e}")
             else:

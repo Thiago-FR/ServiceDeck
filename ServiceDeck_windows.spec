@@ -7,7 +7,7 @@ block_cipher = None
 APP_NAME = 'ServiceDeck'
 
 assets_path = os.path.join('app', 'assets')
-icon_file = os.path.join(assets_path, 'icon.png')
+icon_file = os.path.join(assets_path, 'icon.ico')
 
 a = Analysis(
     ['main.py'],
@@ -44,6 +44,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    icon=icon_file,
 )
 
 coll = COLLECT(

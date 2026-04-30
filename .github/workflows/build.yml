@@ -51,6 +51,11 @@ jobs:
       - name: Install Python dependencies
         run: pip install -r requirements.txt
 
+      - name: Convert icon PNG to ICO
+        run: |
+          pip install Pillow
+          python -c "from PIL import Image; img = Image.open('app/assets/icon.png'); img.save('app/assets/icon.ico')"
+
       - name: Build Windows executable
         run: pyinstaller ServiceDeck_windows.spec
 

@@ -33,6 +33,8 @@ bash setup.sh
 2. Entrar na pasta `ServiceDeck`
 3. Executar `ServiceDeck.exe`
 
+> **Aviso do Windows SmartScreen:** como o executável não possui assinatura digital, o Windows pode exibir um aviso de segurança. Clique em **"Mais informações" → "Executar assim mesmo"** para prosseguir. Isso é normal para aplicações open source distribuídas sem certificado pago.
+
 ---
 
 ## Desenvolvimento
