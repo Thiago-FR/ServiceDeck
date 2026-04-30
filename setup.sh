@@ -49,10 +49,13 @@ chmod +x "${DESKTOP_DIR}/ServiceDeck.desktop"
 # Define ícone customizado no binário para o gerenciador de arquivos
 gio set "${EXEC_PATH}" metadata::custom-icon "file://${ICON_PATH}" 2>/dev/null || true
 
-# Instala no menu de aplicativos do sistema
-mkdir -p ~/.local/share/applications
-cp "${DESKTOP_DIR}/ServiceDeck.desktop" ~/.local/share/applications/
-update-desktop-database ~/.local/share/applications/ 2>/dev/null || true
+# Instala no menu de aplicativos apenas se o .deb não estiver instalado
+# (evita duplicata que conflita com o desktop file do pacote do sistema)
+if [ ! -f "/usr/share/applications/servicedeck.desktop" ]; then
+    mkdir -p ~/.local/share/applications
+    cp "${DESKTOP_DIR}/ServiceDeck.desktop" ~/.local/share/applications/
+    update-desktop-database ~/.local/share/applications/ 2>/dev/null || true
+fi
 
 echo ""
 echo "Lançador criado em: ${DESKTOP_DIR}/ServiceDeck.desktop"
