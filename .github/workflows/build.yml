@@ -32,10 +32,46 @@ jobs:
       - name: Package as tar.gz
         run: tar -czf ServiceDeck-linux.tar.gz -C dist ServiceDeck
 
+      - name: Build .deb package
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          mkdir -p deb_pkg/DEBIAN
+          mkdir -p deb_pkg/usr/lib/servicedeck
+          mkdir -p deb_pkg/usr/share/applications
+          mkdir -p deb_pkg/usr/share/icons/hicolor/256x256/apps
+
+          cp -r dist/ServiceDeck/* deb_pkg/usr/lib/servicedeck/
+          cp app/assets/icon.png deb_pkg/usr/share/icons/hicolor/256x256/apps/servicedeck.png
+
+          cat > deb_pkg/usr/share/applications/servicedeck.desktop << EOF
+          [Desktop Entry]
+          Version=1.0
+          Name=ServiceDeck
+          Comment=Gerenciador de Microserviços
+          Type=Application
+          Terminal=false
+          Exec=/usr/lib/servicedeck/ServiceDeck
+          Icon=servicedeck
+          Categories=Development;Utility;
+          EOF
+
+          cat > deb_pkg/DEBIAN/control << EOF
+          Package: servicedeck
+          Version: ${VERSION}
+          Architecture: amd64
+          Maintainer: Thiago <thiago.rose@conexasaude.com.br>
+          Description: Gerenciador de microserviços
+           Permite iniciar, monitorar e abrir no editor todos os seus serviços a partir de um único lugar.
+          EOF
+
+          dpkg-deb --build --root-owner-group deb_pkg ServiceDeck.deb
+
       - name: Upload to Release
         uses: softprops/action-gh-release@v2
         with:
-          files: ServiceDeck-linux.tar.gz
+          files: |
+            ServiceDeck-linux.tar.gz
+            ServiceDeck.deb
 
   build-windows:
     runs-on: windows-latest

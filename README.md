@@ -6,12 +6,23 @@ Gerenciador de microserviços com interface gráfica. Permite iniciar, monitorar
 
 | Plataforma | Link |
 |------------|------|
-| Linux      | [ServiceDeck-linux.tar.gz](https://github.com/Thiago-FR/ServiceDeck/releases/latest/download/ServiceDeck-linux.tar.gz) |
+| Linux .deb | [ServiceDeck.deb](https://github.com/Thiago-FR/ServiceDeck/releases/latest/download/ServiceDeck.deb) |
+| Linux .tar.gz | [ServiceDeck-linux.tar.gz](https://github.com/Thiago-FR/ServiceDeck/releases/latest/download/ServiceDeck-linux.tar.gz) |
 | Windows    | [ServiceDeck-windows.zip](https://github.com/Thiago-FR/ServiceDeck/releases/latest/download/ServiceDeck-windows.zip) |
 
 ## Como usar
 
 ### Linux
+
+**Opção 1 — .deb (recomendado para Ubuntu/Debian):**
+
+```bash
+sudo dpkg -i ServiceDeck.deb
+```
+
+Ou duplo clique no arquivo `.deb` para instalar pela Central de Programas.
+
+**Opção 2 — tar.gz:**
 
 ```bash
 tar -xzf ServiceDeck-linux.tar.gz
@@ -20,20 +31,6 @@ cd ServiceDeck
 ```
 
 > **Opcional:** rode `bash _internal/setup.sh` para criar um atalho na área de trabalho e instalar no menu de aplicativos do sistema.
-
-> **Compatibilidade:** o binário requer Ubuntu 24.04+ (GLIBC 2.38). Em versões anteriores como Ubuntu 22.04, use a opção abaixo.
-
-#### Ubuntu 22.04 e distros com GLIBC < 2.38
-
-Clone o repositório e use o script de execução direta:
-
-```bash
-git clone https://github.com/Thiago-FR/ServiceDeck.git
-cd ServiceDeck
-./run.sh
-```
-
-Na primeira execução o script cria o ambiente virtual e instala as dependências automaticamente.
 
 ### Windows
 
