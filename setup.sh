@@ -46,6 +46,9 @@ EOL
 
 chmod +x "${DESKTOP_DIR}/ServiceDeck.desktop"
 
+# Define ícone customizado no binário para o gerenciador de arquivos
+gio set "${EXEC_PATH}" metadata::custom-icon "file://${ICON_PATH}" 2>/dev/null || true
+
 # Instala no menu de aplicativos do sistema
 mkdir -p ~/.local/share/applications
 cp "${DESKTOP_DIR}/ServiceDeck.desktop" ~/.local/share/applications/
