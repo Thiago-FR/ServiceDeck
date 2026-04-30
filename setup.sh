@@ -39,7 +39,7 @@ Name=ServiceDeck
 Comment=Gerenciador de Microserviços
 Type=Application
 Terminal=false
-Exec=${EXEC_PATH}
+Exec="${EXEC_PATH}"
 Icon=${ICON_PATH}
 Categories=Development;Utility;
 EOL
