@@ -3,6 +3,7 @@
 # Contém funções auxiliares genéricas para manipulação de arquivos e processos.
 
 import os
+import shutil
 import subprocess
 import platform
 import sys
@@ -34,20 +35,33 @@ def get_microservices(path):
         return None, f"Ocorreu um erro ao acessar o diretório: {e}"
 
 
+def _detect_linux_terminal():
+    """Detecta o emulador de terminal disponível no sistema."""
+    terminals = [
+        ('gnome-terminal', lambda cmd: ['gnome-terminal', '--', 'bash', '-ic', cmd]),
+        ('konsole',        lambda cmd: ['konsole', '-e', 'bash', '-ic', cmd]),
+        ('xfce4-terminal', lambda cmd: ['xfce4-terminal', '-e', f'bash -ic "{cmd}"']),
+        ('xterm',          lambda cmd: ['xterm', '-e', f'bash -ic "{cmd}"']),
+        ('x-terminal-emulator', lambda cmd: ['x-terminal-emulator', '-e', f'bash -ic "{cmd}"']),
+    ]
+    for name, builder in terminals:
+        if shutil.which(name):
+            return builder
+    return None
+
+
 def open_in_new_terminal(command, work_dir):
     """Executa um comando em um novo terminal."""
     system = platform.system()
     try:
         if system == "Linux":
-            # Comando volta a ser o original, sem o 'source'.
             full_command = f'cd "{work_dir}" && {command}; exec bash'
-            # A MUDANÇA ESTÁ AQUI: usamos 'bash -ic' em vez de 'bash -c'.
-            # O '-i' força o modo interativo, que carrega o .bashrc corretamente.
-            subprocess.Popen(
-                ['gnome-terminal', '--', 'bash', '-ic', full_command]
-            )
+            builder = _detect_linux_terminal()
+            if builder:
+                subprocess.Popen(builder(full_command))
+            else:
+                print(f"Nenhum emulador de terminal encontrado para '{work_dir}'.")
         elif system == "Windows":
-            # Código do Windows permanece o mesmo
             full_command = f'title={os.path.basename(work_dir)} && {command}'
             subprocess.Popen(
                 f'start cmd /k "{full_command}"',

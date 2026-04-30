@@ -20,7 +20,7 @@ from PyQt6.QtWidgets import (
   QTextEdit,
 )
 from PyQt6.QtCore import QDateTime
-from PyQt6.QtGui import QIcon
+from PyQt6.QtGui import QColor, QIcon, QPalette
 
 # Importações de outros módulos do nosso projeto
 from .config import CACHE_FILE, APP_NAME
@@ -93,7 +93,13 @@ class ServiceDeckApp(QWidget):
         ))
         self.start_list = QListWidget()
         self.start_list.itemDoubleClicked.connect(self.edit_start_command)
+        self.start_list.itemSelectionChanged.connect(self._update_stop_button)
         start_layout.addWidget(self.start_list)
+
+        self.stop_button = QPushButton("■ Parar Selecionado")
+        self.stop_button.setEnabled(False)
+        self.stop_button.clicked.connect(self.stop_selected_service)
+        start_layout.addWidget(self.stop_button)
 
         center_layout = QVBoxLayout()
         center_layout.addWidget(QLabel("📦 Serviços Disponíveis"))
@@ -153,6 +159,55 @@ class ServiceDeckApp(QWidget):
               f"🔴 SERVIÇO ENCERRADO: '{service}' não está mais em execução."
             )
         self.running_services = running_services_now
+        self._update_list_colors()
+        self._update_stop_button()
+
+    def _update_list_colors(self):
+        default_color = self.start_list.palette().color(QPalette.ColorRole.Text)
+        for i in range(self.start_list.count()):
+            item = self.start_list.item(i)
+            if item.text() in self.running_services:
+                item.setForeground(QColor('#4CAF50'))
+            else:
+                item.setForeground(default_color)
+
+    def _update_stop_button(self):
+        selected = self.start_list.selectedItems()
+        is_running = bool(selected and selected[0].text() in self.running_services)
+        self.stop_button.setEnabled(is_running)
+
+    def stop_selected_service(self):
+        selected = self.start_list.selectedItems()
+        if not selected:
+            return
+        service_name = selected[0].text()
+        service_path = os.path.realpath(
+            os.path.join(self.base_path, service_name)
+        )
+        terminated = False
+        try:
+            for proc in psutil.process_iter(['cwd', 'pid']):
+                try:
+                    if proc.info['cwd'] and \
+                            os.path.realpath(proc.info['cwd']) == service_path:
+                        parent = psutil.Process(proc.pid)
+                        for child in parent.children(recursive=True):
+                            child.kill()
+                        parent.kill()
+                        terminated = True
+                        self.log(f"■ Serviço '{service_name}' encerrado.")
+                        break
+                except (
+                    psutil.NoSuchProcess,
+                    psutil.AccessDenied,
+                    FileNotFoundError
+                ):
+                    continue
+        except Exception as e:
+            self.log(f"❌ Erro ao encerrar '{service_name}': {e}")
+
+        if not terminated:
+            self.log(f"⚠️ Nenhum processo encontrado para '{service_name}'.")
 
     def start_tasks(self):
         services_to_run = {
@@ -190,6 +245,7 @@ class ServiceDeckApp(QWidget):
                   "O monitor confirmará o status em breve."
                 )
                 self.running_services.add(service)
+                self._update_list_colors()
             else:
                 self.log(
                   f"❌ FALHA: Comando não encontrado para '{service}'."

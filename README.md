@@ -61,6 +61,16 @@ pyinstaller ServiceDeck.spec && bash setup.sh
 pyinstaller ServiceDeck_windows.spec
 ```
 
+## Melhorias futuras
+
+- **Perfis/grupos de serviços** — salvar diferentes conjuntos de serviços para alternar entre projetos
+- **Auto-detect mais stacks** — detectar `Makefile`, `docker-compose.yml`, `Cargo.toml` e sugerir o comando adequado
+- **System tray** — minimizar para a bandeja do sistema em vez de fechar a janela
+- **Verificação de atualização** — notificar quando houver nova versão disponível no GitHub
+- **Porta detectada automaticamente** — exibir em qual porta cada serviço está respondendo
+
+---
+
 ### Publicar nova versão
 
 ```bash

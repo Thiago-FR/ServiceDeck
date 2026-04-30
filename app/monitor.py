@@ -3,7 +3,7 @@
 # Contém toda a lógica de monitoramento de processos em background.
 
 import os
-import time
+import threading
 import psutil
 from PyQt6.QtCore import QThread, pyqtSignal
 
@@ -20,6 +20,7 @@ class ProcessMonitorThread(QThread):
         self._running = True
         self._base_path = ""
         self._services_to_monitor = set()
+        self._stop_event = threading.Event()
 
     def set_config(self, base_path, services_set):
         self._base_path = base_path
@@ -28,7 +29,7 @@ class ProcessMonitorThread(QThread):
     def run(self):
         while self._running:
             if not self._services_to_monitor or not self._base_path:
-                time.sleep(3)
+                self._stop_event.wait(3)
                 continue
 
             currently_running = set()
@@ -52,7 +53,8 @@ class ProcessMonitorThread(QThread):
                     continue
 
             self.status_update.emit(currently_running)
-            time.sleep(3)
+            self._stop_event.wait(3)
 
     def stop(self):
         self._running = False
+        self._stop_event.set()
