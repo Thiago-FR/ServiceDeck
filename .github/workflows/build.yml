@@ -64,6 +64,20 @@ jobs:
            Permite iniciar, monitorar e abrir no editor todos os seus serviços a partir de um único lugar.
           EOF
 
+          cat > deb_pkg/DEBIAN/postinst << 'EOF'
+          #!/bin/bash
+          update-icon-caches /usr/share/icons/hicolor/ 2>/dev/null || true
+          update-desktop-database /usr/share/applications/ 2>/dev/null || true
+          EOF
+          chmod 0755 deb_pkg/DEBIAN/postinst
+
+          cat > deb_pkg/DEBIAN/postrm << 'EOF'
+          #!/bin/bash
+          update-icon-caches /usr/share/icons/hicolor/ 2>/dev/null || true
+          update-desktop-database /usr/share/applications/ 2>/dev/null || true
+          EOF
+          chmod 0755 deb_pkg/DEBIAN/postrm
+
           dpkg-deb --build --root-owner-group deb_pkg ServiceDeck.deb
 
       - name: Upload to Release
