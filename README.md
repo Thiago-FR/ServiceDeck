@@ -19,7 +19,21 @@ cd ServiceDeck
 ./ServiceDeck
 ```
 
-> **Opcional:** rode `bash setup.sh` para criar um atalho no menu de aplicativos do sistema.
+> **Opcional:** rode `bash _internal/setup.sh` para criar um atalho na área de trabalho e instalar no menu de aplicativos do sistema.
+
+> **Compatibilidade:** o binário requer Ubuntu 24.04+ (GLIBC 2.38). Em versões anteriores como Ubuntu 22.04, use a opção abaixo.
+
+#### Ubuntu 22.04 e distros com GLIBC < 2.38
+
+Clone o repositório e use o script de execução direta:
+
+```bash
+git clone https://github.com/Thiago-FR/ServiceDeck.git
+cd ServiceDeck
+./run.sh
+```
+
+Na primeira execução o script cria o ambiente virtual e instala as dependências automaticamente.
 
 ### Windows
 
@@ -47,6 +61,12 @@ pip install -r requirements.txt
 
 ```bash
 python main.py
+```
+
+Ou use o script que gerencia o venv automaticamente:
+
+```bash
+./run.sh
 ```
 
 ### Gerar build
