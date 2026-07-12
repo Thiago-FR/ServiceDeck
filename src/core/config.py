@@ -1,7 +1,3 @@
-# app/config.py
-
-# Centraliza as constantes e configurações da aplicação.
-
 import os
 import sys
 
