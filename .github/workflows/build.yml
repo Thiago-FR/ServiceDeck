@@ -2,6 +2,8 @@ name: Build and Release
 
 on:
   push:
+    branches:
+      - main
     tags:
       - 'v*'
 
@@ -9,11 +11,48 @@ permissions:
   contents: write
 
 jobs:
-  build-linux:
-    runs-on: ubuntu-22.04
+  tag:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    outputs:
+      new_tag: ${{ steps.bump.outputs.new_tag }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Bump patch version and push tag
+        id: bump
+        run: |
+          git fetch --tags
+          latest=$(git tag --list 'v*' --sort=-v:refname | head -n1)
+          if [ -z "$latest" ]; then
+            latest="v0.0.0"
+          fi
+
+          version="${latest#v}"
+          IFS='.' read -r major minor patch <<< "$version"
+          new_tag="v${major}.${minor}.$((patch + 1))"
+
+          echo "Última tag: $latest"
+          echo "Nova tag: $new_tag"
+
+          git tag "$new_tag"
+          git push origin "$new_tag"
+          echo "new_tag=$new_tag" >> "$GITHUB_OUTPUT"
+
+  build-linux:
+    needs: tag
+    if: always() && (needs.tag.result == 'success' || needs.tag.result == 'skipped')
+    runs-on: ubuntu-22.04
+    env:
+      VERSION_TAG: ${{ needs.tag.outputs.new_tag || github.ref_name }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.VERSION_TAG }}
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -34,7 +73,7 @@ jobs:
 
       - name: Build .deb package
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
+          VERSION="${VERSION_TAG#v}"
           mkdir -p deb_pkg/DEBIAN
           mkdir -p deb_pkg/usr/lib/servicedeck
           mkdir -p deb_pkg/usr/share/applications
@@ -83,15 +122,22 @@ jobs:
       - name: Upload to Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ env.VERSION_TAG }}
           files: |
             ServiceDeck-linux.tar.gz
             ServiceDeck.deb
 
   build-windows:
+    needs: tag
+    if: always() && (needs.tag.result == 'success' || needs.tag.result == 'skipped')
     runs-on: windows-latest
+    env:
+      VERSION_TAG: ${{ needs.tag.outputs.new_tag || github.ref_name }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ env.VERSION_TAG }}
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -115,4 +161,5 @@ jobs:
       - name: Upload to Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ env.VERSION_TAG }}
           files: ServiceDeck-windows.zip
