@@ -1,5 +1,6 @@
 import os
 
+from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtWidgets import QMessageBox, QPushButton, QVBoxLayout, QWidget
 
 from src.core.cache import CacheService
@@ -17,6 +18,8 @@ from src.ui.log_widget import LogWidget
 
 
 class PathServicesTab(QWidget):
+    base_path_changed = pyqtSignal(str)
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self._base_path = ""
@@ -62,6 +65,7 @@ class PathServicesTab(QWidget):
         self._monitor.set_config(path, set())
         self._populate_services()
         self._save_cache()
+        self.base_path_changed.emit(path)
 
     def _on_stop_requested(self, service_name: str) -> None:
         if not service_name:
@@ -162,6 +166,7 @@ class PathServicesTab(QWidget):
         self._lists_panel.set_base_path(base_path)
         self._monitor.set_config(base_path, set())
         self._populate_services()
+        self.base_path_changed.emit(base_path)
 
     # -------------------------------------------------------------------------
     # Cleanup

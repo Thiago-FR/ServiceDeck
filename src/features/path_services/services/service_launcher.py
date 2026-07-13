@@ -30,11 +30,12 @@ def open_in_new_terminal(command: str, work_dir: str) -> None:
                 print(f"Nenhum emulador de terminal encontrado para '{work_dir}'.")
         elif system == "Windows":
             full_command = f'title={os.path.basename(work_dir)} && {command}'
-            subprocess.Popen(
+            proc = subprocess.Popen(
                 f'start cmd /k "{full_command}"',
                 shell=True,
-                cwd=work_dir
+                cwd=work_dir,
             )
+            proc._handle = None  # evita OSError no __del__ ao fechar o app
     except Exception as e:
         print(f"Erro ao abrir novo terminal para '{work_dir}': {e}")
 
