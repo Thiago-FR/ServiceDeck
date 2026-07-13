@@ -116,10 +116,12 @@ class ServiceListsPanel(QWidget):
         layout.addLayout(start_col)
         layout.addLayout(self._build_arrow_buttons(self._move_to_start, self._move_from_start))
         layout.addLayout(center_col)
-        layout.addLayout(self._build_arrow_buttons(self._move_to_code, self._move_from_code))
+        layout.addLayout(
+            self._build_arrow_buttons(self._move_from_code, self._move_to_code, right_on_top=True)
+        )
         layout.addLayout(code_col)
 
-    def _build_arrow_buttons(self, on_left, on_right) -> QVBoxLayout:
+    def _build_arrow_buttons(self, on_left, on_right, right_on_top: bool = False) -> QVBoxLayout:
         btn_left = QPushButton("<")
         btn_right = QPushButton(">")
         btn_left.clicked.connect(on_left)
@@ -127,8 +129,12 @@ class ServiceListsPanel(QWidget):
 
         layout = QVBoxLayout()
         layout.addStretch()
-        layout.addWidget(btn_left)
-        layout.addWidget(btn_right)
+        if right_on_top:
+            layout.addWidget(btn_right)
+            layout.addWidget(btn_left)
+        else:
+            layout.addWidget(btn_left)
+            layout.addWidget(btn_right)
         layout.addStretch()
         return layout
 

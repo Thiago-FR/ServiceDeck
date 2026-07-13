@@ -5,7 +5,7 @@ on:
     branches:
       - main
     tags:
-      - 'v*'
+      - "v*"
 
 permissions:
   contents: write
@@ -57,7 +57,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
       - name: Install system dependencies
         run: sudo apt-get install -y libgl1 libglib2.0-0 libegl1
@@ -98,7 +98,7 @@ jobs:
           Package: servicedeck
           Version: ${VERSION}
           Architecture: amd64
-          Maintainer: Thiago <thiago.rose@conexasaude.com.br>
+          Maintainer: Thiago <thiago_ssfr@hotmail.com>
           Description: Gerenciador de microserviços
            Permite iniciar, monitorar e abrir no editor todos os seus serviços a partir de um único lugar.
           EOF
@@ -142,7 +142,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
       - name: Install Python dependencies
         run: pip install -r requirements.txt
