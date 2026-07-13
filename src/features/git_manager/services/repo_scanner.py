@@ -26,6 +26,7 @@ class RepoInfo:
     current_branch: str = ""
     branches: list[str] = field(default_factory=list)
     commits_ahead: int = 0
+    commits_behind: int = 0
 
     @property
     def has_changes(self) -> bool:
@@ -63,6 +64,7 @@ def scan_repos(base_path: str) -> tuple[list[RepoInfo], list[str]]:
                 current_branch=_safe_branch_name(repo),
                 branches=_list_branches(repo),
                 commits_ahead=ahead,
+                commits_behind=_commits_behind(repo),
             ))
         except git.InvalidGitRepositoryError:
             no_git.append(name)
@@ -143,6 +145,29 @@ def _commits_ahead(repo: git.Repo) -> int:
         except Exception:
             return 0
 
+    except Exception:
+        return 0
+
+
+def _commits_behind(repo: git.Repo) -> int:
+    """Commits que o remote tem e o local não tem (precisa de pull)."""
+    try:
+        branch = repo.active_branch
+        tracking = branch.tracking_branch()
+
+        if tracking:
+            ref = tracking.name
+        else:
+            try:
+                remote_refs = [r.name for r in repo.remote("origin").refs]
+                candidate = f"origin/{branch.name}"
+                ref = candidate if candidate in remote_refs else None
+            except Exception:
+                ref = None
+
+        if ref:
+            return sum(1 for _ in repo.iter_commits(f"{branch.name}..{ref}"))
+        return 0
     except Exception:
         return 0
 

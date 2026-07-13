@@ -1,4 +1,5 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+from typing import Callable
 
 from PyQt6.QtCore import QThread, pyqtSignal
 
@@ -105,3 +106,17 @@ class FlowWorker(QThread):
             self.log.emit(f"✅ PR #{pr.number} criado: {pr.url}")
         except Exception as e:
             self.log.emit(f"❌ [{t.name}] {e}")
+
+
+class GenericWorker(QThread):
+    """Worker genérico: executa fn(emit) em background e emite finished."""
+    log = pyqtSignal(str)
+    finished = pyqtSignal()
+
+    def __init__(self, fn: Callable[[Callable[[str], None]], None]):
+        super().__init__()
+        self._fn = fn
+
+    def run(self) -> None:
+        self._fn(self.log.emit)
+        self.finished.emit()

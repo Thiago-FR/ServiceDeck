@@ -13,7 +13,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from src.features.git_manager.services.repo_scanner import RepoInfo
+from src.features.git_manager.services.repo_scanner import RepoInfo, RepoStatus
 
 
 class RepoDetailWidget(QWidget):
@@ -21,6 +21,7 @@ class RepoDetailWidget(QWidget):
     files_selection_changed = pyqtSignal()
     pr_title_changed = pyqtSignal()
     branch_fields_changed = pyqtSignal()
+    checkout_requested = pyqtSignal(str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -68,7 +69,7 @@ class RepoDetailWidget(QWidget):
         self._pr_body.blockSignals(False)
 
     def get_work_branch(self) -> str:
-        return self._current_branch_label.text()
+        return self._current_branch_combo.currentText()
 
     def get_base_branch(self) -> str:
         return self._base_branch.currentText()
@@ -93,8 +94,8 @@ class RepoDetailWidget(QWidget):
         layout = QVBoxLayout(self)
         layout.addWidget(self._build_files_group())
         layout.addWidget(self._build_commit_group())
-        layout.addWidget(self._build_branch_group())
         layout.addWidget(self._build_pr_group())
+        layout.addWidget(self._build_branch_group())
 
     def _build_files_group(self) -> QGroupBox:
         group = QGroupBox("Arquivos Modificados")
@@ -134,19 +135,20 @@ class RepoDetailWidget(QWidget):
         return group
 
     def _build_branch_group(self) -> QGroupBox:
-        # TODO: adicionar botão "Stash changes" antes de trocar branch de origem
-        # TODO: adicionar botão "Restore/Unstash" após operações de branch
-        group = QGroupBox("Branch Workflow")
+        group = QGroupBox("Copiar branch")
         layout = QVBoxLayout(group)
 
         row1 = QHBoxLayout()
-        self._current_branch_label = QLabel("—")
-        self._current_branch_label.setStyleSheet("font-weight: bold; color: #4CAF50;")
+        self._current_branch_combo = QComboBox()
+        self._current_branch_combo.setStyleSheet("font-weight: bold; color: #4CAF50;")
+        self._current_branch_combo.setEnabled(False)
+        self._current_branch_combo.setToolTip("Sem alterações locais: clique para trocar de branch")
+        self._current_branch_combo.currentTextChanged.connect(self._on_checkout_requested)
         self._base_branch = QComboBox()
         self._base_branch.currentTextChanged.connect(self._on_base_branch_changed)
         row1.addWidget(QLabel("Branch atual:"))
-        row1.addWidget(self._current_branch_label, stretch=1)
-        row1.addWidget(QLabel("Branch de origem:"))
+        row1.addWidget(self._current_branch_combo, stretch=1)
+        row1.addWidget(QLabel("Branch de destino:"))
         row1.addWidget(self._base_branch, stretch=1)
 
         row2 = QHBoxLayout()
@@ -212,8 +214,26 @@ class RepoDetailWidget(QWidget):
             self._files_layout.addWidget(cb)
 
     def _populate_branches(self, repo: RepoInfo) -> None:
-        self._current_branch_label.setText(repo.current_branch or "—")
+        # --- Branch atual (combo para trocar quando limpo) ---
+        self._current_branch_combo.blockSignals(True)
+        self._current_branch_combo.clear()
+        for branch in repo.branches:
+            self._current_branch_combo.addItem(branch)
+        if repo.current_branch:
+            idx = self._current_branch_combo.findText(repo.current_branch)
+            if idx >= 0:
+                self._current_branch_combo.setCurrentIndex(idx)
+        can_switch = repo.status == RepoStatus.CLEAN
+        self._current_branch_combo.setEnabled(can_switch)
+        tip = (
+            "Clique para trocar de branch"
+            if can_switch
+            else "Faça commit ou descarte as alterações para trocar de branch"
+        )
+        self._current_branch_combo.setToolTip(tip)
+        self._current_branch_combo.blockSignals(False)
 
+        # --- Branch de destino (exclui current) ---
         current_selection = self._base_branch.currentText()
         self._base_branch.blockSignals(True)
         self._base_branch.clear()
@@ -237,3 +257,7 @@ class RepoDetailWidget(QWidget):
 
     def _on_suffix_changed(self) -> None:
         self.branch_fields_changed.emit()
+
+    def _on_checkout_requested(self, branch: str) -> None:
+        if branch:
+            self.checkout_requested.emit(branch)

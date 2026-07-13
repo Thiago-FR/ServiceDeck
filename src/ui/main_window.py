@@ -13,7 +13,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle(APP_NAME)
-        self.setGeometry(200, 200, 1000, 750)
+        self.setGeometry(150, 80, 1100, 900)
 
         icon_path = os.path.join(resource_path("app/assets"), "icon.png")
         if os.path.exists(icon_path):

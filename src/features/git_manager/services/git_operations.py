@@ -83,6 +83,71 @@ def checkout_new_branch(
         return OperationResult(False, f"❌ Erro ao criar branch '{new_branch}': {e}")
 
 
+def pull_repo(repo_path: str, token: str = "") -> OperationResult:
+    try:
+        repo = git.Repo(repo_path)
+        original_url = repo.remote("origin").url
+        if token:
+            repo.git.remote("set-url", "origin", _inject_token(original_url, token))
+        try:
+            repo.git.pull()
+            return OperationResult(True, f"⬇ Pull realizado em '{_name(repo_path)}'.")
+        finally:
+            if token:
+                repo.git.remote("set-url", "origin", original_url)
+    except git.GitCommandError as e:
+        stderr = str(e.stderr).strip() if e.stderr else str(e)
+        return OperationResult(False, f"❌ Erro ao fazer pull em '{_name(repo_path)}': {stderr}")
+    except Exception as e:
+        return OperationResult(False, f"❌ Erro ao fazer pull em '{_name(repo_path)}': {e}")
+
+
+def delete_branch(
+    repo_path: str,
+    branch: str,
+    also_remote: bool = False,
+    token: str = "",
+) -> OperationResult:
+    try:
+        repo = git.Repo(repo_path)
+        repo.git.branch("-D", branch)
+        msg = f"🗑 Branch '{branch}' deletada localmente em '{_name(repo_path)}'."
+        if also_remote:
+            original_url = repo.remote("origin").url
+            try:
+                if token:
+                    repo.git.remote("set-url", "origin", _inject_token(original_url, token))
+                repo.git.push("origin", "--delete", branch)
+                msg += " Removida do remote também."
+            except git.GitCommandError as e:
+                stderr = str(e.stderr).strip() if e.stderr else str(e)
+                msg += f" (Falha ao remover do remote: {stderr})"
+            finally:
+                if token:
+                    repo.git.remote("set-url", "origin", original_url)
+        return OperationResult(True, msg)
+    except git.GitCommandError as e:
+        stderr = str(e.stderr).strip() if e.stderr else str(e)
+        return OperationResult(False, f"❌ Erro ao deletar branch '{branch}': {stderr}")
+    except Exception as e:
+        return OperationResult(False, f"❌ Erro ao deletar branch '{branch}': {e}")
+
+
+def checkout_branch(repo_path: str, branch: str) -> OperationResult:
+    """Troca para uma branch existente (sem criar)."""
+    try:
+        repo = git.Repo(repo_path)
+        repo.git.checkout(branch)
+        return OperationResult(
+            True, f"✅ [{_name(repo_path)}] Trocou para branch '{branch}'."
+        )
+    except git.GitCommandError as e:
+        stderr = str(e.stderr).strip() if e.stderr else str(e)
+        return OperationResult(False, f"❌ Erro ao trocar branch: {stderr}")
+    except Exception as e:
+        return OperationResult(False, f"❌ Erro ao trocar branch: {e}")
+
+
 def branch_exists_locally(repo_path: str, branch: str) -> bool:
     try:
         repo = git.Repo(repo_path)
