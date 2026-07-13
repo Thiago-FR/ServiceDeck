@@ -1,7 +1,3 @@
-# app/monitor.py
-
-# Contém toda a lógica de monitoramento de processos em background.
-
 import os
 import threading
 import psutil
@@ -9,10 +5,6 @@ from PyQt6.QtCore import QThread, pyqtSignal
 
 
 class ProcessMonitorThread(QThread):
-    """
-    Uma thread que monitora continuamente os processos em execução
-    baseado em seus diretórios de trabalho (cwd).
-    """
     status_update = pyqtSignal(set)
 
     def __init__(self):
@@ -22,11 +14,11 @@ class ProcessMonitorThread(QThread):
         self._services_to_monitor = set()
         self._stop_event = threading.Event()
 
-    def set_config(self, base_path, services_set):
+    def set_config(self, base_path: str, services_set: set) -> None:
         self._base_path = base_path
         self._services_to_monitor = services_set
 
-    def run(self):
+    def run(self) -> None:
         while self._running:
             if not self._services_to_monitor or not self._base_path:
                 self._stop_event.wait(3)
@@ -34,8 +26,8 @@ class ProcessMonitorThread(QThread):
 
             currently_running = set()
             service_paths = {
-              name: os.path.join(self._base_path, name)
-              for name in self._services_to_monitor
+                name: os.path.join(self._base_path, name)
+                for name in self._services_to_monitor
             }
 
             for proc in psutil.process_iter(['cwd']):
@@ -45,16 +37,12 @@ class ProcessMonitorThread(QThread):
                             if os.path.samefile(proc.info['cwd'], path):
                                 currently_running.add(name)
                                 break
-                except (
-                    psutil.NoSuchProcess,
-                    psutil.AccessDenied,
-                    FileNotFoundError
-                  ):
+                except (psutil.NoSuchProcess, psutil.AccessDenied, FileNotFoundError):
                     continue
 
             self.status_update.emit(currently_running)
             self._stop_event.wait(3)
 
-    def stop(self):
+    def stop(self) -> None:
         self._running = False
         self._stop_event.set()

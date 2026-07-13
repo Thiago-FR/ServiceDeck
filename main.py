@@ -1,18 +1,12 @@
-# main.py
-
-# Ponto de entrada principal para a aplicação ServiceDeck.
-# Responsável por criar e executar a aplicação PyQt.
-
 import sys
 from PyQt6.QtWidgets import QApplication
-from app.main_window import ServiceDeckApp
+from src.ui.main_window import MainWindow
 
 
 def main():
-    """Inicia o loop de eventos da aplicação."""
     app = QApplication(sys.argv)
-    ex = ServiceDeckApp()
-    ex.show()
+    window = MainWindow()
+    window.show()
     sys.exit(app.exec())
 
 
