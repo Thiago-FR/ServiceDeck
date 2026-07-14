@@ -1,6 +1,6 @@
 import os
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import git
 
@@ -259,6 +259,108 @@ def init_repo(repo_path: str) -> OperationResult:
         return OperationResult(True, f"✅ Repositório inicializado em '{repo_path}'.")
     except Exception as e:
         return OperationResult(False, f"❌ Erro ao inicializar repositório: {e}")
+
+
+@dataclass
+class CommitInfo:
+    hash: str
+    short_hash: str
+    message: str
+    date: str
+    author: str
+    files: list[str] = field(default_factory=list)
+
+
+def get_unpushed_commits(repo_path: str) -> list[CommitInfo]:
+    try:
+        repo = git.Repo(repo_path)
+        ref = _get_remote_ref(repo)
+        branch = repo.active_branch
+        commits = (
+            list(repo.iter_commits(f"{ref}..{branch.name}"))
+            if ref
+            else list(repo.iter_commits(branch.name))
+        )
+        result: list[CommitInfo] = []
+        for c in commits:
+            files: list[str] = []
+            try:
+                if c.parents:
+                    files = [d.b_path or d.a_path for d in c.parents[0].diff(c)]
+                else:
+                    files = list(c.stats.files.keys())
+            except Exception:
+                pass
+            result.append(CommitInfo(
+                hash=c.hexsha,
+                short_hash=c.hexsha[:7],
+                message=c.message.split("\n")[0][:80],
+                date=c.committed_datetime.strftime("%d/%m %H:%M"),
+                author=c.author.name,
+                files=files,
+            ))
+        return result
+    except Exception:
+        return []
+
+
+def get_commit_diff(repo_path: str, commit_hash: str) -> str:
+    try:
+        repo = git.Repo(repo_path)
+        commit = repo.commit(commit_hash)
+        if commit.parents:
+            return repo.git.diff(commit.parents[0].hexsha, commit_hash)
+        return repo.git.show(commit_hash, "--no-color")
+    except Exception as e:
+        return f"Erro ao carregar diff: {e}"
+
+
+def reset_branch(repo_path: str, mode: str) -> OperationResult:
+    try:
+        repo = git.Repo(repo_path)
+        ref = _get_remote_ref(repo)
+        if not ref:
+            return OperationResult(
+                False,
+                "❌ Branch sem rastreamento remoto. Faça push antes de desfazer commits.",
+            )
+        repo.git.reset(f"--{mode}", ref)
+        return OperationResult(True, f"✅ Reset {mode} concluído em '{_name(repo_path)}'.")
+    except git.GitCommandError as e:
+        stderr = str(e.stderr).strip() if e.stderr else str(e)
+        return OperationResult(False, f"❌ Erro no reset: {stderr}")
+    except Exception as e:
+        return OperationResult(False, f"❌ Erro no reset: {e}")
+
+
+def revert_commit(repo_path: str, commit_hash: str) -> OperationResult:
+    try:
+        repo = git.Repo(repo_path)
+        repo.git.revert(commit_hash, "--no-edit")
+        return OperationResult(
+            True, f"✅ Commit {commit_hash[:7]} revertido em '{_name(repo_path)}'."
+        )
+    except git.GitCommandError as e:
+        stderr = str(e.stderr).strip() if e.stderr else str(e)
+        return OperationResult(False, f"❌ Erro ao reverter commit: {stderr}")
+    except Exception as e:
+        return OperationResult(False, f"❌ Erro ao reverter commit: {e}")
+
+
+def _get_remote_ref(repo: git.Repo) -> str | None:
+    try:
+        branch = repo.active_branch
+        tracking = branch.tracking_branch()
+        if tracking:
+            return tracking.name
+        try:
+            remote_refs = [r.name for r in repo.remote("origin").refs]
+            candidate = f"origin/{branch.name}"
+            return candidate if candidate in remote_refs else None
+        except Exception:
+            return None
+    except Exception:
+        return None
 
 
 def _inject_token(url: str, token: str) -> str:

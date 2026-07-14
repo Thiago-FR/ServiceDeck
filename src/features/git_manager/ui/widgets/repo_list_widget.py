@@ -19,6 +19,15 @@ _GROUPS = [
     (RepoStatus.CLEAN,   "🟢  Sem alteração", "#27ae60"),
 ]
 
+_STYLE_NORMAL = (
+    "text-align: left; padding: 2px 4px; "
+    "background: transparent; color: palette(windowtext);"
+)
+_STYLE_SELECTED = (
+    "text-align: left; padding: 2px 4px; border-radius: 3px; "
+    "background-color: #2a5298; color: #ffffff; font-weight: bold;"
+)
+
 
 class RepoListWidget(QWidget):
     repo_selected = pyqtSignal(str)       # full_path do repo clicado
@@ -113,11 +122,16 @@ class RepoListWidget(QWidget):
         if repo.status == RepoStatus.CHANGES:
             detail = f"  ({len(repo.changed_files)} arquivo(s))"
         elif repo.status == RepoStatus.AHEAD:
-            detail = f"  ({repo.commits_ahead} commit(s) não publicado(s))"
+            branch = repo.current_branch or "?"
+            detail = f"  ({branch} ↑{repo.commits_ahead})"
 
         name_btn = QPushButton(f"{repo.name}{detail}")
         name_btn.setFlat(True)
-        name_btn.setStyleSheet("text-align: left; padding: 2px 4px;")
+        name_btn.setStyleSheet(_STYLE_NORMAL)
+        if repo.status == RepoStatus.AHEAD and repo.ahead_commits:
+            name_btn.setToolTip("Commits não enviados:\n" + "\n".join(
+                f"  • {m}" for m in repo.ahead_commits
+            ))
         name_btn.clicked.connect(lambda _, p=repo.full_path: self._on_repo_clicked(p))
         self._repo_buttons[repo.full_path] = name_btn
 
@@ -137,13 +151,7 @@ class RepoListWidget(QWidget):
     def _on_repo_clicked(self, path: str) -> None:
         self._selected_path = path
         for p, btn in self._repo_buttons.items():
-            if p == path:
-                btn.setStyleSheet(
-                    "text-align: left; padding: 2px 4px; "
-                    "background-color: #2a5298; color: white; font-weight: bold;"
-                )
-            else:
-                btn.setStyleSheet("text-align: left; padding: 2px 4px;")
+            btn.setStyleSheet(_STYLE_SELECTED if p == path else _STYLE_NORMAL)
         self.repo_selected.emit(path)
 
     def _check_all(self) -> None:

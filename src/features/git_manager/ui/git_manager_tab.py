@@ -18,6 +18,8 @@ from PyQt6.QtWidgets import (
 from src.core.cache import CacheService
 from src.core.config import CACHE_FILE
 from src.features.git_manager.services.flow_worker import FlowTask, FlowWorker, GenericWorker
+from src.features.git_manager.services.silenced_files import SilencedFiles
+from src.features.git_manager.ui.dialogs.unpushed_commits_dialog import UnpushedCommitsDialog
 from src.features.git_manager.services.git_operations import (
     branch_exists_locally,
     checkout_branch,
@@ -73,10 +75,14 @@ class GitManagerTab(QWidget):
         self._cache = CacheService(CACHE_FILE)
         self._token_store = TokenStore()
         self._providers = {"github": GitHubProvider()}
+        self._silenced_files = SilencedFiles(self._cache)
 
         self._build_ui()
         self._setup_timer()
         self._update_action_buttons()
+
+        if not self._token_store.load("github"):
+            self._token_config.highlight_missing()
 
     # -------------------------------------------------------------------------
     # Public API
@@ -153,6 +159,8 @@ class GitManagerTab(QWidget):
         self._detail.pr_title_changed.connect(self._update_action_buttons)
         self._detail.branch_fields_changed.connect(self._update_action_buttons)
         self._detail.checkout_requested.connect(self._checkout_branch)
+        self._detail.silence_requested.connect(self._on_silence_requested)
+        self._detail.unsilence_requested.connect(self._on_unsilence_requested)
 
         panel = QWidget()
         layout = QVBoxLayout(panel)
@@ -216,6 +224,11 @@ class GitManagerTab(QWidget):
         self._branch_status_label = QLabel("Selecione um repositório")
         self._branch_status_label.setStyleSheet("font-size: 11px; color: #888;")
 
+        self._view_commits_btn = QPushButton("📋 Ver commits (0)")
+        self._view_commits_btn.setToolTip("Visualizar, desfazer ou reverter commits não publicados")
+        self._view_commits_btn.setVisible(False)
+        self._view_commits_btn.clicked.connect(self._open_unpushed_dialog)
+
         self._pull_btn = QPushButton("⬇ Pull")
         self._pull_btn.setToolTip("Atualiza a branch com commits do remote")
         self._pull_btn.setEnabled(False)
@@ -227,6 +240,7 @@ class GitManagerTab(QWidget):
         self._delete_branch_btn.clicked.connect(self._delete_branch_dialog)
 
         layout.addWidget(self._branch_status_label, stretch=1)
+        layout.addWidget(self._view_commits_btn)
         layout.addWidget(self._pull_btn)
         layout.addWidget(self._delete_branch_btn)
         return bar
@@ -244,6 +258,8 @@ class GitManagerTab(QWidget):
             f"{repo.current_branch}  —  {' | '.join(parts)}"
         )
         self._branch_status_label.setStyleSheet(f"font-size: 11px; color: {color};")
+        self._view_commits_btn.setVisible(repo.commits_ahead > 0)
+        self._view_commits_btn.setText(f"📋 Ver commits ({repo.commits_ahead})")
         self._pull_btn.setEnabled(repo.commits_behind > 0)
         self._delete_branch_btn.setEnabled(len(repo.branches) > 1)
 
@@ -381,11 +397,12 @@ class GitManagerTab(QWidget):
         if not repo:
             return
         self._current_repo_path = repo_path
-        self._detail.load_repo(repo)
+        self._detail.load_repo(repo, self._silenced_files.load())
         self._restore_state(repo_path)
         self._update_branch_status_bar(repo)
 
     def _on_token_validated(self, provider: str, _token: str) -> None:
+        self._token_config.clear_highlight()
         self._log.append(f"✅ Token {provider} configurado com sucesso.")
         self._update_action_buttons()
 
@@ -547,8 +564,10 @@ class GitManagerTab(QWidget):
             if not state:
                 continue
             repo_info = self._repos.get(path)
+            silenced = self._silenced_files.load()
             files = state.selected_files or (
-                [f.path for f in repo_info.changed_files] if repo_info else []
+                [f.path for f in repo_info.changed_files if f.path not in silenced]
+                if repo_info else []
             )
             new_branch = state.new_branch_suffix.strip()
             tasks.append(FlowTask(
@@ -708,6 +727,38 @@ class GitManagerTab(QWidget):
         self._log.append(result.message)
         if result.success:
             self._refresh_repos()
+
+    def _open_unpushed_dialog(self) -> None:
+        if not self._current_repo_path:
+            return
+        repo = self._repos.get(self._current_repo_path)
+        if not repo:
+            return
+        dlg = UnpushedCommitsDialog(
+            repo_path=self._current_repo_path,
+            repo_name=repo.name,
+            branch=repo.current_branch,
+            parent=self,
+        )
+        dlg.exec()
+        self._refresh_repos()
+
+    def _on_silence_requested(self, file_path: str) -> None:
+        self._silenced_files.silence(file_path)
+        self._reload_current_repo_detail()
+
+    def _on_unsilence_requested(self, file_path: str) -> None:
+        self._silenced_files.unsilence(file_path)
+        self._reload_current_repo_detail()
+
+    def _reload_current_repo_detail(self) -> None:
+        if not self._current_repo_path:
+            return
+        repo = self._repos.get(self._current_repo_path)
+        if not repo:
+            return
+        self._detail.load_repo(repo, self._silenced_files.load())
+        self._restore_state(self._current_repo_path)
 
     def _run_background(self, fn, on_finish=None) -> None:
         self._worker = GenericWorker(fn)

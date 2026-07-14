@@ -27,6 +27,7 @@ class RepoInfo:
     branches: list[str] = field(default_factory=list)
     commits_ahead: int = 0
     commits_behind: int = 0
+    ahead_commits: list[str] = field(default_factory=list)
 
     @property
     def has_changes(self) -> bool:
@@ -53,7 +54,7 @@ def scan_repos(base_path: str) -> tuple[list[RepoInfo], list[str]]:
         try:
             repo = git.Repo(full_path)
             changed = _collect_changed_files(repo)
-            ahead = _commits_ahead(repo)
+            ahead, ahead_msgs = _ahead_info(repo)
             status = _determine_status(changed, ahead)
 
             repos.append(RepoInfo(
@@ -64,6 +65,7 @@ def scan_repos(base_path: str) -> tuple[list[RepoInfo], list[str]]:
                 current_branch=_safe_branch_name(repo),
                 branches=_list_branches(repo),
                 commits_ahead=ahead,
+                ahead_commits=ahead_msgs,
                 commits_behind=_commits_behind(repo),
             ))
         except git.InvalidGitRepositoryError:
@@ -120,33 +122,32 @@ def _collect_changed_files(repo: git.Repo) -> list[ChangedFile]:
     return sorted(files, key=lambda f: f.path)
 
 
-def _commits_ahead(repo: git.Repo) -> int:
+def _ahead_info(repo: git.Repo) -> tuple[int, list[str]]:
+    """Returns (commits_ahead_count, up_to_10_first_line_messages)."""
     try:
         branch = repo.active_branch
         tracking = branch.tracking_branch()
-
         if tracking:
             ref = tracking.name
         else:
-            # Tenta origin/<branch> como fallback
             try:
                 remote_refs = [r.name for r in repo.remote("origin").refs]
                 candidate = f"origin/{branch.name}"
                 ref = candidate if candidate in remote_refs else None
             except Exception:
                 ref = None
-
         if ref:
-            return sum(1 for _ in repo.iter_commits(f"{ref}..{branch.name}"))
-
-        # Branch nunca publicada: conta commits locais como "ahead"
+            commits = list(repo.iter_commits(f"{ref}..{branch.name}"))
+            msgs = [c.message.split("\n")[0][:80] for c in commits[:10]]
+            return len(commits), msgs
         try:
-            return sum(1 for _ in repo.iter_commits(branch.name))
+            commits = list(repo.iter_commits(branch.name))
+            msgs = [c.message.split("\n")[0][:80] for c in commits[:10]]
+            return len(commits), msgs
         except Exception:
-            return 0
-
+            return 0, []
     except Exception:
-        return 0
+        return 0, []
 
 
 def _commits_behind(repo: git.Repo) -> int:

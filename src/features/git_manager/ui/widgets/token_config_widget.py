@@ -45,6 +45,22 @@ class TokenConfigWidget(QWidget):
         layout.addWidget(clear_btn)
         layout.addWidget(self._status_label)
 
+    def highlight_missing(self) -> None:
+        self.setStyleSheet(
+            "TokenConfigWidget {"
+            "  background-color: rgba(230, 126, 34, 0.12);"
+            "  border: 2px solid #e67e22;"
+            "  border-radius: 6px;"
+            "  padding: 4px;"
+            "}"
+        )
+        self._status_label.setText("⚠️ Configure o token primeiro!")
+        self._status_label.setStyleSheet("color: #e67e22; font-weight: bold;")
+
+    def clear_highlight(self) -> None:
+        self.setStyleSheet("")
+        self._status_label.setStyleSheet("")
+
     def _on_validate(self) -> None:
         token = self._token_input.text().strip()
         if not token:
@@ -54,6 +70,7 @@ class TokenConfigWidget(QWidget):
         self._status_label.setText("⏳ Validando...")
         if self._provider.validate_token(token):
             self._store.save("github", token)
+            self.clear_highlight()
             self._status_label.setText("✅ Token válido")
             self.token_validated.emit("github", token)
         else:
@@ -62,6 +79,7 @@ class TokenConfigWidget(QWidget):
     def _on_clear(self) -> None:
         self._token_input.clear()
         self._store.clear("github")
+        self.clear_highlight()
         self._status_label.setText("⚪ Token não configurado")
 
     def _load_saved_token(self) -> None:

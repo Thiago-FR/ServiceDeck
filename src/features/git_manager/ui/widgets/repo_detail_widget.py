@@ -8,6 +8,7 @@ from PyQt6.QtWidgets import (
     QLineEdit,
     QPushButton,
     QScrollArea,
+    QTabWidget,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -22,6 +23,8 @@ class RepoDetailWidget(QWidget):
     pr_title_changed = pyqtSignal()
     branch_fields_changed = pyqtSignal()
     checkout_requested = pyqtSignal(str)
+    silence_requested = pyqtSignal(str)
+    unsilence_requested = pyqtSignal(str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -33,9 +36,9 @@ class RepoDetailWidget(QWidget):
     # Public API
     # -------------------------------------------------------------------------
 
-    def load_repo(self, repo: RepoInfo) -> None:
+    def load_repo(self, repo: RepoInfo, silenced: set[str] | None = None) -> None:
         self.setEnabled(True)
-        self._populate_files(repo)
+        self._populate_files(repo, silenced or set())
         self._populate_branches(repo)
 
     def refresh_branches(self, repo: RepoInfo) -> None:
@@ -81,7 +84,6 @@ class RepoDetailWidget(QWidget):
         self._new_branch_suffix.blockSignals(True)
         self._new_branch_suffix.setText(text)
         self._new_branch_suffix.blockSignals(False)
-        # self._update_branch_preview()
 
     def get_new_branch_name(self) -> str:
         return self.get_new_branch_suffix()
@@ -111,14 +113,31 @@ class RepoDetailWidget(QWidget):
         header.addStretch()
         layout.addLayout(header)
 
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setMaximumHeight(150)
+        self._files_tabs = QTabWidget()
+        self._files_tabs.setMaximumHeight(250)
+
+        # Tab 0: arquivos ativos
+        active_scroll = QScrollArea()
+        active_scroll.setWidgetResizable(True)
         self._files_container = QWidget()
         self._files_layout = QVBoxLayout(self._files_container)
         self._files_layout.setContentsMargins(4, 4, 4, 4)
-        scroll.setWidget(self._files_container)
-        layout.addWidget(scroll)
+        self._files_layout.setSpacing(2)
+        active_scroll.setWidget(self._files_container)
+        self._files_tabs.addTab(active_scroll, "📁 Arquivos")
+
+        # Tab 1: arquivos silenciados (oculta até ter algum)
+        silent_scroll = QScrollArea()
+        silent_scroll.setWidgetResizable(True)
+        self._silenced_container = QWidget()
+        self._silenced_layout = QVBoxLayout(self._silenced_container)
+        self._silenced_layout.setContentsMargins(4, 4, 4, 4)
+        self._silenced_layout.setSpacing(2)
+        silent_scroll.setWidget(self._silenced_container)
+        self._silenced_tab_idx = self._files_tabs.addTab(silent_scroll, "🔇 Silenciados")
+        self._files_tabs.setTabVisible(self._silenced_tab_idx, False)
+
+        layout.addWidget(self._files_tabs)
         return group
 
     def _build_commit_group(self) -> QGroupBox:
@@ -198,23 +217,66 @@ class RepoDetailWidget(QWidget):
     # Internal helpers
     # -------------------------------------------------------------------------
 
-    def _populate_files(self, repo: RepoInfo) -> None:
-        while self._files_layout.count():
-            item = self._files_layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
+    def _populate_files(self, repo: RepoInfo, silenced: set[str]) -> None:
+        self._clear_layout(self._files_layout)
+        self._clear_layout(self._silenced_layout)
         self._file_checkboxes.clear()
 
+        silenced_shown: list[str] = []
+
         for changed_file in repo.changed_files:
+            if changed_file.path in silenced:
+                silenced_shown.append(changed_file.path)
+                continue
+
+            row = QWidget()
+            row_layout = QHBoxLayout(row)
+            row_layout.setContentsMargins(0, 0, 0, 0)
+            row_layout.setSpacing(4)
+
             label = f"[{changed_file.status}] {changed_file.path}"
             cb = QCheckBox(label)
             cb.setChecked(True)
             cb.stateChanged.connect(lambda _: self.files_selection_changed.emit())
             self._file_checkboxes[changed_file.path] = cb
-            self._files_layout.addWidget(cb)
+
+            silence_btn = QPushButton("🔇")
+            silence_btn.setFixedWidth(28)
+            silence_btn.setToolTip("Silenciar: não incluir em commits")
+            silence_btn.clicked.connect(
+                lambda _, p=changed_file.path: self.silence_requested.emit(p)
+            )
+
+            row_layout.addWidget(cb, stretch=1)
+            row_layout.addWidget(silence_btn)
+            self._files_layout.addWidget(row)
+
+        for path in silenced_shown:
+            row = QWidget()
+            row_layout = QHBoxLayout(row)
+            row_layout.setContentsMargins(0, 0, 0, 0)
+            row_layout.setSpacing(4)
+
+            label = QLabel(path)
+            label.setStyleSheet("color: #888;")
+            activate_btn = QPushButton("🔔 Ativar")
+            activate_btn.setToolTip("Incluir arquivo novamente nos commits")
+            activate_btn.clicked.connect(
+                lambda _, p=path: self.unsilence_requested.emit(p)
+            )
+
+            row_layout.addWidget(label, stretch=1)
+            row_layout.addWidget(activate_btn)
+            self._silenced_layout.addWidget(row)
+
+        has_silenced = bool(silenced_shown)
+        self._files_tabs.setTabVisible(self._silenced_tab_idx, has_silenced)
+        if has_silenced:
+            self._files_tabs.setTabText(
+                self._silenced_tab_idx, f"🔇 Silenciados ({len(silenced_shown)})"
+            )
 
     def _populate_branches(self, repo: RepoInfo) -> None:
-        # --- Branch atual (combo para trocar quando limpo) ---
         self._current_branch_combo.blockSignals(True)
         self._current_branch_combo.clear()
         for branch in repo.branches:
@@ -233,7 +295,6 @@ class RepoDetailWidget(QWidget):
         self._current_branch_combo.setToolTip(tip)
         self._current_branch_combo.blockSignals(False)
 
-        # --- Branch de destino (exclui current) ---
         current_selection = self._base_branch.currentText()
         self._base_branch.blockSignals(True)
         self._base_branch.clear()
@@ -261,3 +322,9 @@ class RepoDetailWidget(QWidget):
     def _on_checkout_requested(self, branch: str) -> None:
         if branch:
             self.checkout_requested.emit(branch)
+
+    def _clear_layout(self, layout: QVBoxLayout) -> None:
+        while layout.count():
+            item = layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
