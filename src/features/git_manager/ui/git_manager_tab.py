@@ -18,6 +18,7 @@ from PyQt6.QtWidgets import (
 from src.core.cache import CacheService
 from src.core.config import CACHE_FILE
 from src.features.git_manager.services.flow_worker import FlowTask, FlowWorker, GenericWorker
+from src.features.git_manager.services.hidden_files import HiddenFiles
 from src.features.git_manager.services.silenced_files import SilencedFiles
 from src.features.git_manager.ui.dialogs.unpushed_commits_dialog import UnpushedCommitsDialog
 from src.features.git_manager.services.git_operations import (
@@ -43,6 +44,7 @@ from src.features.git_manager.ui.widgets.token_config_widget import TokenConfigW
 from src.ui.log_widget import LogWidget
 
 _CACHE_KEY_BRANCH_SUFFIX = "git_branch_suffix"
+_CACHE_KEY_IGNORED_DIRS = "git_ignored_dirs"
 _REFRESH_INTERVAL_MS = 5000
 
 
@@ -75,7 +77,9 @@ class GitManagerTab(QWidget):
         self._cache = CacheService(CACHE_FILE)
         self._token_store = TokenStore()
         self._providers = {"github": GitHubProvider()}
-        self._silenced_files = SilencedFiles(self._cache)
+        self._silenced_files = SilencedFiles()
+        self._hidden_files = HiddenFiles(self._cache)
+        self._warned_no_git: set[str] = set()
 
         self._build_ui()
         self._setup_timer()
@@ -115,6 +119,7 @@ class GitManagerTab(QWidget):
         top_layout.setContentsMargins(0, 0, 0, 0)
         top_layout.addWidget(lists_splitter)
         top_layout.addWidget(self._build_bulk_branch_bar())
+        top_layout.addWidget(self._build_copy_branch_bar())
         top_layout.addWidget(self._build_branch_status_bar())
         top_layout.addWidget(self._build_action_bar())
 
@@ -161,6 +166,9 @@ class GitManagerTab(QWidget):
         self._detail.checkout_requested.connect(self._checkout_branch)
         self._detail.silence_requested.connect(self._on_silence_requested)
         self._detail.unsilence_requested.connect(self._on_unsilence_requested)
+        self._detail.discard_requested.connect(self._on_discard_requested)
+        self._detail.hide_requested.connect(self._on_hide_requested)
+        self._detail.unhide_requested.connect(self._on_unhide_requested)
 
         panel = QWidget()
         layout = QVBoxLayout(panel)
@@ -188,6 +196,29 @@ class GitManagerTab(QWidget):
         layout.addWidget(QLabel("Nome da branch:"))
         layout.addWidget(self._bulk_name_input, stretch=1)
         layout.addWidget(self._bulk_branch_btn)
+        return group
+
+    def _build_copy_branch_bar(self) -> QGroupBox:
+        group = QGroupBox("Copiar branch nos repos marcados ☑")
+        layout = QHBoxLayout(group)
+
+        self._copy_base_combo = QComboBox()
+        self._copy_base_combo.setMinimumWidth(120)
+        self._copy_base_combo.currentTextChanged.connect(self._update_copy_preview)
+
+        self._copy_name_input = QLineEdit()
+        self._copy_name_input.setPlaceholderText("ex: tentativa1, feat/login")
+        self._copy_name_input.textChanged.connect(self._update_copy_preview)
+
+        self._copy_branch_btn = QPushButton("🌿 Copiar branch")
+        self._copy_branch_btn.setEnabled(False)
+        self._copy_branch_btn.clicked.connect(self._create_copy_branch)
+
+        layout.addWidget(QLabel("A partir de:"))
+        layout.addWidget(self._copy_base_combo)
+        layout.addWidget(QLabel("Nome da nova branch:"))
+        layout.addWidget(self._copy_name_input, stretch=1)
+        layout.addWidget(self._copy_branch_btn)
         return group
 
     def _build_action_bar(self) -> QWidget:
@@ -280,6 +311,7 @@ class GitManagerTab(QWidget):
         self._pr_btn.setEnabled(self._can_create_prs(checked))
         self._flow_btn.setEnabled(bool(checked) and bool(self._repos))
         self._update_bulk_preview()
+        self._update_copy_preview()
 
     def _can_commit(self, checked: set[str]) -> bool:
         return any(
@@ -308,6 +340,24 @@ class GitManagerTab(QWidget):
         name = self._bulk_name_input.text().strip()
         self._bulk_branch_btn.setEnabled(bool(base and name and self._checked_paths))
 
+    def _update_copy_preview(self) -> None:
+        base = self._copy_base_combo.currentText()
+        name = self._copy_name_input.text().strip()
+        self._copy_branch_btn.setEnabled(bool(base and name and self._checked_paths))
+
+    def _create_copy_branch(self) -> None:
+        base = self._copy_base_combo.currentText()
+        new_branch = self._copy_name_input.text().strip()
+        if not base or not new_branch or not self._checked_paths:
+            return
+        self._log.append(
+            f"--- COPIAR BRANCH '{new_branch}' A PARTIR DE '{base}' NOS REPOS MARCADOS ---"
+        )
+        for path in self._checked_paths:
+            result = checkout_new_branch(path, base, new_branch)
+            self._log.append(result.message)
+        self._refresh_repos()
+
     # -------------------------------------------------------------------------
     # Repo scanning & timer
     # -------------------------------------------------------------------------
@@ -316,7 +366,9 @@ class GitManagerTab(QWidget):
         if not self._base_path:
             return
 
-        repos, no_git = scan_repos(self._base_path)
+        repos, all_no_git = scan_repos(self._base_path)
+        ignored_dirs = set(self._cache.load().get(_CACHE_KEY_IGNORED_DIRS, []))
+        no_git = [d for d in all_no_git if d not in ignored_dirs]
         new_paths = {r.full_path for r in repos}
 
         for path in list(self._repo_states.keys()):
@@ -337,13 +389,13 @@ class GitManagerTab(QWidget):
         self._refresh_bulk_branches(repos)
         self._refresh_detail_if_current(repos)
 
-        if no_git:
+        new_warnings = [d for d in no_git if d not in self._warned_no_git]
+        if new_warnings:
             self._log.append(
-                f"⚠️ Sem .git: {', '.join(no_git)}. Use 'git init' se necessário."
+                f"⚠️ Sem .git: {', '.join(new_warnings)}. Use 'git init' se necessário."
             )
-
-        if not repos and no_git:
-            self._offer_git_init(no_git)
+            self._warned_no_git.update(new_warnings)
+            self._offer_git_init(new_warnings)
 
         if not self._timer.isActive() and self._base_path:
             self._timer.start()
@@ -362,14 +414,15 @@ class GitManagerTab(QWidget):
         all_branches: set[str] = set()
         for repo in repos:
             all_branches.update(repo.branches)
-        current = self._bulk_base_combo.currentText()
-        self._bulk_base_combo.blockSignals(True)
-        self._bulk_base_combo.clear()
-        for branch in sorted(all_branches):
-            self._bulk_base_combo.addItem(branch)
-        if current in all_branches:
-            self._bulk_base_combo.setCurrentText(current)
-        self._bulk_base_combo.blockSignals(False)
+        for combo in (self._bulk_base_combo, self._copy_base_combo):
+            current = combo.currentText()
+            combo.blockSignals(True)
+            combo.clear()
+            for branch in sorted(all_branches):
+                combo.addItem(branch)
+            if current in all_branches:
+                combo.setCurrentText(current)
+            combo.blockSignals(False)
 
     def _offer_git_init(self, dirs_without_git: list[str]) -> None:
         answer = QMessageBox.question(
@@ -378,6 +431,12 @@ class GitManagerTab(QWidget):
             "Nenhuma pasta com .git foi encontrada.\nDeseja inicializar repositórios agora?",
         )
         if answer != QMessageBox.StandardButton.Yes:
+            data = self._cache.load()
+            ignored = set(data.get(_CACHE_KEY_IGNORED_DIRS, []))
+            ignored.update(dirs_without_git)
+            data[_CACHE_KEY_IGNORED_DIRS] = sorted(ignored)
+            self._cache.save(data)
+            self._warned_no_git.update(dirs_without_git)
             return
         for name in dirs_without_git:
             result = init_repo(os.path.join(self._base_path, name))
@@ -397,11 +456,13 @@ class GitManagerTab(QWidget):
         if not repo:
             return
         self._current_repo_path = repo_path
-        self._detail.load_repo(repo, self._silenced_files.load())
+        silenced = self._silenced_files.get_silenced(repo_path)
+        hidden = self._hidden_files.load()
+        self._detail.load_repo(repo, silenced, hidden)
         self._restore_state(repo_path)
         self._update_branch_status_bar(repo)
 
-    def _on_token_validated(self, provider: str, _token: str) -> None:
+    def _on_token_validated(self, provider: str, *_) -> None:
         self._token_config.clear_highlight()
         self._log.append(f"✅ Token {provider} configurado com sucesso.")
         self._update_action_buttons()
@@ -564,11 +625,15 @@ class GitManagerTab(QWidget):
             if not state:
                 continue
             repo_info = self._repos.get(path)
-            silenced = self._silenced_files.load()
-            files = state.selected_files or (
-                [f.path for f in repo_info.changed_files if f.path not in silenced]
-                if repo_info else []
+            silenced = set(self._silenced_files.get_silenced(path))
+            hidden = self._hidden_files.load()
+            raw_files = state.selected_files or (
+                [f.path for f in repo_info.changed_files] if repo_info else []
             )
+            files = [f for f in raw_files if f not in silenced and f not in hidden]
+            has_push = repo_info and repo_info.commits_ahead > 0
+            if not files and not has_push:
+                continue
             new_branch = state.new_branch_suffix.strip()
             tasks.append(FlowTask(
                 path=path,
@@ -705,28 +770,54 @@ class GitManagerTab(QWidget):
             self._log.append("⚠️ Não há outras branches para deletar.")
             return
 
-        from PyQt6.QtWidgets import QInputDialog
-        msg = f"Repo: {repo.name}   Atual: {repo.current_branch}\n\nSelecione a branch a deletar:"
-        branch, ok = QInputDialog.getItem(
-            self, "Deletar branch", msg, other_branches, 0, False,
+        from PyQt6.QtWidgets import (
+            QCheckBox as _QCB,
+            QDialog,
+            QDialogButtonBox,
+            QListWidget,
+            QListWidgetItem,
         )
-        if not ok:
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle(f"Deletar branch — {repo.name}")
+        dlg.resize(400, 300)
+        dlg_layout = QVBoxLayout(dlg)
+        dlg_layout.addWidget(
+            QLabel(f"Repo: <b>{repo.name}</b>   Branch atual: <b>{repo.current_branch}</b>")
+        )
+        dlg_layout.addWidget(QLabel("Selecione as branches para deletar:"))
+
+        list_widget = QListWidget()
+        list_widget.setSelectionMode(QListWidget.SelectionMode.MultiSelection)
+        for b in other_branches:
+            list_widget.addItem(QListWidgetItem(b))
+        dlg_layout.addWidget(list_widget)
+
+        also_remote_cb = _QCB("Apagar do remote também (origin)")
+        dlg_layout.addWidget(also_remote_cb)
+
+        btns = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        btns.accepted.connect(dlg.accept)
+        btns.rejected.connect(dlg.reject)
+        dlg_layout.addWidget(btns)
+
+        if dlg.exec() != QDialog.DialogCode.Accepted:
             return
 
-        also_remote = QMessageBox.question(
-            self,
-            "Remover do remote?",
-            f"Deletar '{branch}' também do remote (origin)?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-        ) == QMessageBox.StandardButton.Yes
+        selected = [item.text() for item in list_widget.selectedItems()]
+        if not selected:
+            return
 
+        also_remote = also_remote_cb.isChecked()
         token = self._token_store.load("github") if also_remote else ""
-        result = delete_branch(
-            self._current_repo_path, branch, also_remote=also_remote, token=token
-        )
-        self._log.append(result.message)
-        if result.success:
-            self._refresh_repos()
+        for branch in selected:
+            result = delete_branch(
+                self._current_repo_path, branch, also_remote=also_remote, token=token
+            )
+            self._log.append(result.message)
+        self._refresh_repos()
 
     def _open_unpushed_dialog(self) -> None:
         if not self._current_repo_path:
@@ -743,12 +834,32 @@ class GitManagerTab(QWidget):
         dlg.exec()
         self._refresh_repos()
 
-    def _on_silence_requested(self, file_path: str) -> None:
-        self._silenced_files.silence(file_path)
+    def _on_silence_requested(self, files: list[str]) -> None:
+        result = self._silenced_files.silence(self._current_repo_path, files)
+        if result.message:
+            self._log.append(result.message)
         self._reload_current_repo_detail()
 
-    def _on_unsilence_requested(self, file_path: str) -> None:
-        self._silenced_files.unsilence(file_path)
+    def _on_unsilence_requested(self, files: list[str]) -> None:
+        result = self._silenced_files.unsilence(self._current_repo_path, files)
+        if result.message:
+            self._log.append(result.message)
+        self._reload_current_repo_detail()
+
+    def _on_discard_requested(self, files: list[str]) -> None:
+        result = self._silenced_files.discard(self._current_repo_path, files)
+        if result.message:
+            self._log.append(result.message)
+        self._reload_current_repo_detail()
+
+    def _on_hide_requested(self, files: list[str]) -> None:
+        self._hidden_files.hide(files)
+        self._log.append(f"👁 {len(files)} arquivo(s) ocultado(s) da lista.")
+        self._reload_current_repo_detail()
+
+    def _on_unhide_requested(self, files: list[str]) -> None:
+        self._hidden_files.unhide(files)
+        self._log.append(f"👁 {len(files)} arquivo(s) voltando para a lista.")
         self._reload_current_repo_detail()
 
     def _reload_current_repo_detail(self) -> None:
@@ -757,7 +868,9 @@ class GitManagerTab(QWidget):
         repo = self._repos.get(self._current_repo_path)
         if not repo:
             return
-        self._detail.load_repo(repo, self._silenced_files.load())
+        silenced = self._silenced_files.get_silenced(self._current_repo_path)
+        hidden = self._hidden_files.load()
+        self._detail.load_repo(repo, silenced, hidden)
         self._restore_state(self._current_repo_path)
 
     def _run_background(self, fn, on_finish=None) -> None:
