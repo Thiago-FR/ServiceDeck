@@ -29,6 +29,16 @@ _STYLE_SELECTED = (
 )
 
 
+def _effective_status(repo: RepoInfo, hidden: set[str]) -> RepoStatus:
+    """Status para agrupamento na lista, ignorando arquivos ocultados pelo usuário."""
+    visible = any(f.path not in hidden for f in repo.changed_files)
+    if visible:
+        return RepoStatus.CHANGES
+    if repo.commits_ahead > 0:
+        return RepoStatus.AHEAD
+    return RepoStatus.CLEAN
+
+
 class RepoListWidget(QWidget):
     repo_selected = pyqtSignal(str)       # full_path do repo clicado
     selection_changed = pyqtSignal(list)  # lista de full_paths marcados com ☑
@@ -44,25 +54,39 @@ class RepoListWidget(QWidget):
     # Public API
     # -------------------------------------------------------------------------
 
-    def load_repos(self, repos: list[RepoInfo]) -> None:
+    def load_repos(self, repos: list[RepoInfo], hidden: set[str] | None = None) -> None:
+        hidden = hidden or set()
+        previous_paths = set(self._checkboxes.keys())
+        previous_checked = set(self.get_checked_paths())
+
         self._checkboxes.clear()
         self._repo_buttons.clear()
         self._clear_layout(self._content_layout)
 
         by_status: dict[RepoStatus, list[RepoInfo]] = {s: [] for s, *_ in _GROUPS}
         for repo in repos:
-            by_status[repo.status].append(repo)
+            by_status[_effective_status(repo, hidden)].append(repo)
 
         for status, label_text, color in _GROUPS:
             group = by_status[status]
             self._add_separator(label_text, color)
             if group:
                 for repo in group:
-                    self._add_repo_row(repo)
+                    # Repo novo (nunca visto): marcado por padrão.
+                    # Repo já conhecido: preserva o estado que o usuário escolheu.
+                    checked = (
+                        repo.full_path not in previous_paths
+                        or repo.full_path in previous_checked
+                    )
+                    self._add_repo_row(repo, hidden, checked)
             else:
                 self._add_empty_label()
 
         self._content_layout.addStretch()
+
+        if self._selected_path in self._repo_buttons:
+            self._repo_buttons[self._selected_path].setStyleSheet(_STYLE_SELECTED)
+
         self.selection_changed.emit(self.get_checked_paths())
 
     def get_checked_paths(self) -> list[str]:
@@ -108,20 +132,21 @@ class RepoListWidget(QWidget):
         label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self._content_layout.addWidget(label)
 
-    def _add_repo_row(self, repo: RepoInfo) -> None:
+    def _add_repo_row(self, repo: RepoInfo, hidden: set[str], checked: bool = True) -> None:
         row = QWidget()
         layout = QHBoxLayout(row)
         layout.setContentsMargins(4, 1, 4, 1)
 
         cb = QCheckBox()
-        cb.setChecked(True)
+        cb.setChecked(checked)
         cb.stateChanged.connect(lambda _: self.selection_changed.emit(self.get_checked_paths()))
         self._checkboxes[repo.full_path] = cb
 
+        visible_count = len([f for f in repo.changed_files if f.path not in hidden])
         detail = ""
-        if repo.status == RepoStatus.CHANGES:
-            detail = f"  ({len(repo.changed_files)} arquivo(s))"
-        elif repo.status == RepoStatus.AHEAD:
+        if visible_count:
+            detail = f"  ({visible_count} arquivo(s))"
+        elif repo.commits_ahead > 0:
             branch = repo.current_branch or "?"
             detail = f"  ({branch} ↑{repo.commits_ahead})"
 

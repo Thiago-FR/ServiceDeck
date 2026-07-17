@@ -385,8 +385,8 @@ class GitManagerTab(QWidget):
                 )
 
         self._repos = {r.full_path: r for r in repos}
-        self._repo_list.load_repos(repos)
-        self._refresh_bulk_branches(repos)
+        self._repo_list.load_repos(repos, self._hidden_files.load())
+        self._refresh_bulk_branches()
         self._refresh_detail_if_current(repos)
 
         new_warnings = [d for d in no_git if d not in self._warned_no_git]
@@ -410,17 +410,22 @@ class GitManagerTab(QWidget):
             self._detail.refresh_branches(updated)
             self._update_branch_status_bar(updated)
 
-    def _refresh_bulk_branches(self, repos: list[RepoInfo]) -> None:
-        all_branches: set[str] = set()
-        for repo in repos:
-            all_branches.update(repo.branches)
+    def _refresh_bulk_branches(self) -> None:
+        """Só oferece branches que existem em TODOS os repos marcados ☑."""
+        checked_repos = [self._repos[p] for p in self._checked_paths if p in self._repos]
+        common_branches: set[str] = set()
+        if checked_repos:
+            common_branches = set(checked_repos[0].branches)
+            for repo in checked_repos[1:]:
+                common_branches &= set(repo.branches)
+
         for combo in (self._bulk_base_combo, self._copy_base_combo):
             current = combo.currentText()
             combo.blockSignals(True)
             combo.clear()
-            for branch in sorted(all_branches):
+            for branch in sorted(common_branches):
                 combo.addItem(branch)
-            if current in all_branches:
+            if current in common_branches:
                 combo.setCurrentText(current)
             combo.blockSignals(False)
 
@@ -448,6 +453,7 @@ class GitManagerTab(QWidget):
 
     def _on_selection_changed(self, checked_paths: list[str]) -> None:
         self._checked_paths = checked_paths
+        self._refresh_bulk_branches()
         self._update_action_buttons()
 
     def _on_repo_selected(self, repo_path: str) -> None:

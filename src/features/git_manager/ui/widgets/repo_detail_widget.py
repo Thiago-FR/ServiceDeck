@@ -124,7 +124,7 @@ class RepoDetailWidget(QWidget):
         layout = QVBoxLayout(group)
 
         self._files_tabs = QTabWidget()
-        self._files_tabs.setMaximumHeight(280)
+        self._files_tabs.setMaximumHeight(420)
 
         # ── Tab 0: arquivos ativos ──────────────────────────────────────────
         active_w = QWidget()
